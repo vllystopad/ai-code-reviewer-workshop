@@ -1,6 +1,7 @@
 // READY — `npm run ui`: a tiny local UI on the same engine as the CLI. node:http only, no build step.
 // Binds to 127.0.0.1 (PORT, HOST override it). It never posts to GitHub.
 import '../src/env.ts';
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { config, parseRequest, review } from './api.ts';
@@ -43,6 +44,19 @@ createServer(async (req, res) => {
         return send(res, 200, await review(parsed.req));
       } catch (e) {
         return send(res, 500, { error: (e as Error).message });
+      }
+    }
+    // Saved reports: GET /api/report?name=<file>&format=<pdf|txt>
+    if (req.method === 'GET' && req.url?.startsWith('/api/report')) {
+      const q = new URL(req.url, 'http://localhost').searchParams;
+      const name = q.get('name') ?? '';
+      const format = q.get('format') ?? 'txt';
+      try {
+        const text = readFileSync(`reports/${name}`, 'utf8');
+        if (format === 'pdf') return send(res, 200, execSync(`pandoc reports/${name} -t plain`).toString(), 'text/plain');
+        return send(res, 200, text, 'text/html');
+      } catch {
+        return send(res, 404, `<h1>Report ${name} not found</h1>`, 'text/html');
       }
     }
     send(res, 404, { error: 'not found' });
